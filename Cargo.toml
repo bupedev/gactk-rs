@@ -1,0 +1,13 @@
+[package]
+name = "gactk"
+version = "0.1.0"
+authors = ["bupedev <ben@bupe.dev>"]
+description = "Generative Art Creators Toolkit: A rust crate for generative art utilities."
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/bupedev/gactk-rs.git"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
