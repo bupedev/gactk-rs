@@ -5,21 +5,7 @@ use std::{
 
 use num_traits::{real::Real, Zero, Euclid};
 
-// TODO: Move this trait to it's own file.
-pub trait RealConst: Real {
-    const PI: Self;
-    const TAU: Self;
-}
-
-impl RealConst for f32 {
-    const PI: Self = std::f32::consts::PI;
-    const TAU: Self = std::f32::consts::TAU;
-}
-
-impl RealConst for f64 {
-    const PI: Self = std::f64::consts::PI;
-    const TAU: Self = std::f64::consts::TAU;
-}
+use crate::numerics::RealConst;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Vec2<T: Real> {
@@ -96,6 +82,10 @@ impl<T: Real> Vec2<T> {
     }
 
     pub fn reflect(&self, axis: Vec2<T>) -> Self {
+        if(axis.magnitude().is_zero()) {
+            return self.clone();
+        }
+
         let radians = axis.angle() + axis.angle();
         let cos = radians.cos();
         let sin = radians.sin();
@@ -201,8 +191,8 @@ impl<T: Real> Sub<Vec2<T>> for Vec2<T> {
 
     fn sub(self, rhs: Vec2<T>) -> Self::Output {
         Vec2 {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
         }
     }
 }
@@ -219,6 +209,16 @@ mod tests {
     };
 
     const EPSILON: f64 = 1.5e-15;
+
+    #[test]
+    fn display() {
+        fn test(v: Vec2<f64>, string: &str) {
+            assert_eq!(v.to_string(), string);
+        }
+
+        test(Vec2::new(-2., 3.), "[-2, 3]");
+        test(Vec2::new(0.5, 0.), "[0.5, 0]");
+    }
 
     mod constructors {
         use super::*;
@@ -381,7 +381,6 @@ mod tests {
             test(&mut Vec2::unit(FRAC_PI_4), -FRAC_PI_2, Vec2::unit(7. * FRAC_PI_4));
             test(&mut Vec2::unit(FRAC_PI_2), -11. * FRAC_PI_6, Vec2::unit(2. * FRAC_PI_3));
         }
-
         
         #[test]
         fn rotate() {
@@ -414,6 +413,7 @@ mod tests {
             }
 
             test(&mut Vec2::zero(), Vec2::unit(FRAC_PI_2), Vec2::zero());
+            test(&mut Vec2::unit(FRAC_PI_6), Vec2::zero(), Vec2::unit(FRAC_PI_6));
             test(&mut Vec2::unit(0.), Vec2::unit(FRAC_PI_2), Vec2::unit(PI));
             test(&mut Vec2::unit(0.), Vec2::unit(3. * FRAC_PI_2), Vec2::unit(PI));
             test(&mut Vec2::unit(FRAC_PI_2), Vec2::unit(0.), Vec2::unit(3. * FRAC_PI_2));
@@ -422,7 +422,6 @@ mod tests {
             test(&mut Vec2::unit(FRAC_PI_6), Vec2::unit(3. * FRAC_PI_4), Vec2::unit(8. * FRAC_PI_6));
         }
 
-        
         #[test]
         fn reflect() {
             fn test(vector: Vec2<f64>, axis: Vec2<f64>, expected: Vec2<f64>) {
@@ -432,6 +431,7 @@ mod tests {
             }
 
             test(Vec2::zero(), Vec2::unit(FRAC_PI_2), Vec2::zero());
+            test(Vec2::unit(FRAC_PI_6), Vec2::zero(), Vec2::unit(FRAC_PI_6));
             test(Vec2::unit(0.), Vec2::unit(FRAC_PI_2), Vec2::unit(PI));
             test(Vec2::unit(0.), Vec2::unit(3. * FRAC_PI_2), Vec2::unit(PI));
             test(Vec2::unit(FRAC_PI_2), Vec2::unit(0.), Vec2::unit(3. * FRAC_PI_2));
@@ -461,7 +461,6 @@ mod tests {
             test(&mut Vec2::new(-2., 2.), Vec2::new(4., -3.), Vec2::new(-56./25., 42./25.));
         }
 
-        
         #[test]
         fn project() {
             fn test(vector: Vec2<f64>, basis: Vec2<f64>, expected: Vec2<f64>) {
@@ -479,6 +478,98 @@ mod tests {
             test(Vec2::new(1., 1.), Vec2::new(-1., 0.), Vec2::new(1., 0.));
             test(Vec2::new(1., 1.), Vec2::new(0., -1.), Vec2::new(0., 1.));
             test(Vec2::new(-2., 2.), Vec2::new(4., -3.), Vec2::new(-56./25., 42./25.));
+        }
+    }
+
+    mod ops {
+        use super::*;
+        
+        #[test]
+        fn add_real() {
+            fn test(vector: Vec2<f64>, real: f64, expected: Vec2<f64>) {
+                let actual = vector + real;
+                assert_eq!(actual, expected);
+            }
+
+            test(Vec2::zero(), 0., Vec2::zero());
+            test(Vec2::zero(), 1., Vec2::new(1., 1.));
+            test(Vec2::zero(), 2., Vec2::new(2., 2.));
+            test(Vec2::zero(), -1., Vec2::new(-1., -1.));
+            test(Vec2::new(1., 2.), 1., Vec2::new(2., 3.));
+            test(Vec2::new(1., 2.), -1., Vec2::new(0., 1.));
+        }
+        
+        #[test]
+        fn add_vec() {
+            fn test(a: Vec2<f64>, b: Vec2<f64>, expected: Vec2<f64>) {
+                let actual = a + b;
+                assert_eq!(actual, expected);
+            }
+
+            test(Vec2::zero(), Vec2::zero(), Vec2::zero());
+            test(Vec2::zero(), Vec2::new(1., 0.), Vec2::new(1., 0.));
+            test(Vec2::zero(), Vec2::new(0., 1.), Vec2::new(0., 1.));
+            test(Vec2::new(-2., 3.), Vec2::zero(), Vec2::new(-2., 3.));
+            test(Vec2::new(3., 4.), Vec2::new(-2., -3.), Vec2::new(1., 1.));
+        }
+        
+        #[test]
+        fn sub_real() {
+            fn test(vector: Vec2<f64>, real: f64, expected: Vec2<f64>) {
+                let actual = vector - real;
+                assert_eq!(actual, expected);
+            }
+
+            test(Vec2::zero(), 0., Vec2::zero());
+            test(Vec2::zero(), 1., Vec2::new(-1., -1.));
+            test(Vec2::zero(), 2., Vec2::new(-2., -2.));
+            test(Vec2::zero(), -1., Vec2::new(1., 1.));
+            test(Vec2::new(1., 2.), 1., Vec2::new(0., 1.));
+            test(Vec2::new(1., 2.), -1., Vec2::new(2., 3.));
+        }
+        
+        #[test]
+        fn sub_vec() {
+            fn test(a: Vec2<f64>, b: Vec2<f64>, expected: Vec2<f64>) {
+                let actual = a - b;
+                assert_eq!(actual, expected);
+            }
+
+            test(Vec2::zero(), Vec2::zero(), Vec2::zero());
+            test(Vec2::zero(), Vec2::new(1., 0.), Vec2::new(-1., 0.));
+            test(Vec2::zero(), Vec2::new(0., 1.), Vec2::new(0., -1.));
+            test(Vec2::new(-2., 3.), Vec2::zero(), Vec2::new(-2., 3.));
+            test(Vec2::new(3., 4.), Vec2::new(-2., -3.), Vec2::new(5., 7.));
+        }
+        
+        #[test]
+        fn mul_real() {
+            fn test(vector: Vec2<f64>, real: f64, expected: Vec2<f64>) {
+                let actual = vector * real;
+                assert_eq!(actual, expected);
+            }
+
+            test(Vec2::zero(), 2., Vec2::zero());
+            test(Vec2::new(1., 0.), 2., Vec2::new(2., 0.));
+            test(Vec2::new(0., 1.), 2., Vec2::new(0., 2.));
+            test(Vec2::new(1., 2.), 2., Vec2::new(2., 4.));
+            test(Vec2::new(1., 2.), 0.5, Vec2::new(0.5, 1.));
+            test(Vec2::new(1., 2.), 0., Vec2::new(0., 0.));
+        }
+        
+        #[test]
+        fn div_real() {
+            fn test(vector: Vec2<f64>, real: f64, expected: Vec2<f64>) {
+                let actual = vector / real;
+                assert_eq!(actual, expected);
+            }
+
+            test(Vec2::zero(), 2., Vec2::zero());
+            test(Vec2::new(1., 0.), 2., Vec2::new(0.5, 0.));
+            test(Vec2::new(0., 1.), 2., Vec2::new(0., 0.5));
+            test(Vec2::new(1., 2.), 2., Vec2::new(0.5, 1.));
+            test(Vec2::new(1., 2.), 0.5, Vec2::new(2., 4.));
+            test(Vec2::new(1., 2.), 0., Vec2::new(f64::INFINITY, f64::INFINITY));
         }
     }
 }
