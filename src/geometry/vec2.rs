@@ -1,9 +1,25 @@
 use std::{
     fmt::{Display, Formatter, Result},
-    ops::{Add, Div, Mul, Sub},
+    ops::{Add, Div, Mul, Sub}
 };
 
-use num_traits::{real::Real, Zero};
+use num_traits::{real::Real, Zero, Euclid};
+
+// TODO: Move this trait to it's own file.
+pub trait RealConst: Real {
+    const PI: Self;
+    const TAU: Self;
+}
+
+impl RealConst for f32 {
+    const PI: Self = std::f32::consts::PI;
+    const TAU: Self = std::f32::consts::TAU;
+}
+
+impl RealConst for f64 {
+    const PI: Self = std::f64::consts::PI;
+    const TAU: Self = std::f64::consts::TAU;
+}
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Vec2<T: Real> {
@@ -39,16 +55,29 @@ impl<T: Real> Vec2<T> {
         self.x * other.y - self.y * other.x
     }
 
-    pub fn angleTo(&self, other: Vec2<T>) -> T {
-        other.angle() - self.angle()
+    pub fn normalize_mut(&mut self) -> Self {
+        *self = self.normalize();
+        *self
     }
 
     pub fn normalize(&self) -> Self {
         let mag = self.magnitude();
-        Self {
-            x: self.x / mag,
-            y: self.y / mag,
+        if mag.is_zero() {
+            Self {
+                x: self.x,
+                y: self.y
+            }
+        } else {
+            Self {
+                x: self.x / mag,
+                y: self.y / mag
+            }
         }
+    }
+
+    pub fn rotate_mut(&mut self, radians: T) -> Self {
+        *self = self.rotate(radians);
+        *self
     }
 
     pub fn rotate(&self, radians: T) -> Self {
@@ -59,6 +88,11 @@ impl<T: Real> Vec2<T> {
             x: self.x * cos - self.y * sin,
             y: self.x * sin + self.y * cos,
         }
+    }
+
+    pub fn reflect_mut(&mut self, axis: Vec2<T>) -> Self {
+        *self = self.reflect(axis);
+        *self
     }
 
     pub fn reflect(&self, axis: Vec2<T>) -> Self {
@@ -72,8 +106,19 @@ impl<T: Real> Vec2<T> {
         }
     }
 
+    pub fn project_mut(&mut self, basis: Vec2<T>) -> Self {
+        *self = self.project(basis);
+        *self
+    }
+
     pub fn project(&self, basis: Vec2<T>) -> Self {
         basis * (self.dot(basis) / basis.dot(basis))
+    }
+}
+
+impl<T: Real + RealConst + Euclid> Vec2<T> {
+    pub fn angle_to(&self, other: Vec2<T>) -> T {
+        (other.angle() - self.angle()).rem_euclid(&T::TAU)
     }
 }
 
@@ -165,6 +210,15 @@ impl<T: Real> Sub<Vec2<T>> for Vec2<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::f64::consts::{
+        FRAC_PI_2, 
+        FRAC_PI_3, 
+        FRAC_PI_4, 
+        FRAC_PI_6, 
+        PI
+    };
+
+    const EPSILON: f64 = 1.5e-15;
 
     mod constructors {
         use super::*;
@@ -178,50 +232,253 @@ mod tests {
             assert_eq!(v.y, y);
         }
 
-        mod unit {
-            use super::*;
-            use std::f64::consts::{FRAC_PI_2, PI};
-
+        #[test]
+        fn unit() {            
             fn test(angle: f64, expected: Vec2<f64>) {
                 let actual = Vec2::unit(angle);
-                assert!((actual.x - expected.x).abs() < 1e-15);
-                assert!((actual.y - expected.y).abs() < 1e-15);
+                assert!((actual.x - expected.x).abs() < EPSILON, "actual x: {}, expected x: {}", actual.x, expected.x);
+                assert!((actual.y - expected.y).abs() < EPSILON, "actual y: {}, expected y: {}", actual.y, expected.y);
             }
 
-            #[test]
-            fn zero_rads() {
-                test(0., Vec2::new(1., 0.))
+            test(-FRAC_PI_6, Vec2::new(0.75.sqrt(), -0.5));
+            test(-5. * FRAC_PI_4, Vec2::new(-0.5.sqrt(), 0.5.sqrt()));
+            test(0., Vec2::new(1., 0.));
+            test(FRAC_PI_6, Vec2::new(0.75.sqrt(), 0.5));
+            test(2. * FRAC_PI_3, Vec2::new(-0.5, 0.75.sqrt()));
+            test(5. * FRAC_PI_4, Vec2::new(-0.5.sqrt(), -0.5.sqrt()));
+            test(5. * FRAC_PI_3, Vec2::new(0.5, -0.75.sqrt()));
+            test(2. * PI, Vec2::new(1., 0.));
+            test(13. * FRAC_PI_6, Vec2::new(0.75.sqrt(), 0.5));
+            test(13. * FRAC_PI_4, Vec2::new(-0.5.sqrt(), -0.5.sqrt()));
+        }
+    }
+
+    mod methods {
+        use super::*;
+
+        #[test]
+        fn magnitude() {
+            fn test(vector: Vec2<f64>, expected: f64) {
+                let actual = vector.magnitude();
+                assert!((actual - expected).abs() < EPSILON, "actual: {}, expected: {}", actual, expected);
             }
 
-            #[test]
-            fn half_pi_rads() {
-                test(FRAC_PI_2, Vec2::new(0., 1.))
+            test(Vec2::new(3., 4.), 5.);
+            test(Vec2::new(-5., 12.), 13.);
+            test(Vec2::new(8., -15.), 17.);
+            test(Vec2::new(-7., -24.), 25.);
+        }
+        
+        #[test]
+        fn angle() {
+            fn test(vector: Vec2<f64>, expected: f64) {
+                let actual = vector.angle();
+                assert!((actual - expected).abs() < EPSILON, "actual: {}, expected: {}", actual, expected);
             }
 
-            #[test]
-            fn pi_rads() {
-                test(PI, Vec2::new(-1., 0.))
+            test(Vec2::unit(FRAC_PI_6), FRAC_PI_6);
+            test(Vec2::unit(2. * FRAC_PI_3), 2. * FRAC_PI_3);
+            test(Vec2::unit(5. * FRAC_PI_4), -3. * FRAC_PI_4);
+            test(Vec2::unit(3. * FRAC_PI_2),  -FRAC_PI_2);
+        }
+
+        #[test]
+        fn dot() {
+            fn test(a: Vec2<f64>, b: Vec2<f64>, expected: f64) {
+                let actual = a.dot(b);
+                assert!((actual - expected).abs() < EPSILON, "actual: {}, expected: {}", actual, expected);
             }
 
-            #[test]
-            fn three_half_pi_rads() {
-                test(3. * FRAC_PI_2, Vec2::new(0., -1.))
+            test(Vec2::new(1., 2.), Vec2::new(3., 1.), 5.);
+            test(Vec2::new(-1., 2.), Vec2::new(3., 1.), -1.);
+            test(Vec2::new(1., 2.), Vec2::new(3., -1.), 1.);
+            test(Vec2::new(-1., 2.), Vec2::new(3., -1.), -5.);
+            test(Vec2::new(-1., -2.), Vec2::new(-3., -1.), 5.);
+        }
+
+        #[test]
+        fn cross() {
+            fn test(a: Vec2<f64>, b: Vec2<f64>, expected: f64) {
+                let actual = a.cross(b);
+                assert!((actual - expected).abs() < EPSILON, "actual: {}, expected: {}", actual, expected);
             }
 
-            #[test]
-            fn two_pi_rads() {
-                test(2. * PI, Vec2::new(1., 0.))
+            test(Vec2::new(1., 2.), Vec2::new(3., 1.), -5.);
+            test(Vec2::new(-1., 2.), Vec2::new(3., 1.), -7.);
+            test(Vec2::new(1., -2.), Vec2::new(3., 1.), 7.);
+            test(Vec2::new(-1., 2.), Vec2::new(-3., 1.), 5.);
+            test(Vec2::new(-1., -2.), Vec2::new(-3., -1.), -5.);
+        }
+
+        #[test]
+        fn angle_to() {
+            fn test(a: Vec2<f64>, b: Vec2<f64>, expected: f64) {
+                let actual = a.angle_to(b);
+                assert!((actual - expected).abs() < EPSILON, "actual: {}, expected: {}", actual, expected);
             }
 
-            #[test]
-            fn four_pi_rads() {
-                test(4. * PI, Vec2::new(1., 0.))
+            test(Vec2::unit(FRAC_PI_6), Vec2::unit(5. * FRAC_PI_6), 2. * FRAC_PI_3);
+            test(Vec2::unit(5. * FRAC_PI_6), Vec2::unit(FRAC_PI_6), 4. * FRAC_PI_3);
+            test(Vec2::unit(FRAC_PI_4), Vec2::unit(5. * FRAC_PI_4), PI);
+            test(Vec2::unit(5. * FRAC_PI_4), Vec2::unit(FRAC_PI_4), PI);
+        }
+
+        #[test]
+        fn normalize_mut() {
+            fn test(vector: &mut Vec2<f64>, expected: Vec2<f64>) {
+                let actual = vector.normalize_mut();
+                assert!((actual.x - expected.x).abs() < EPSILON, "actual x: {}, expected x: {}", actual.x, expected.x);
+                assert!((actual.y - expected.y).abs() < EPSILON, "actual y: {}, expected y: {}", actual.y, expected.y);
+                assert_eq!(actual.x, vector.x, "Expect x to mutate");
+                assert_eq!(actual.y, vector.y, "Expect y to mutate");
             }
 
-            #[test]
-            fn negative_half_pi_rads() {
-                test(-FRAC_PI_2, Vec2::new(0., -1.))
+            test(&mut Vec2::new(0., 0.), Vec2::new(0., 0.));
+            test(&mut Vec2::new(1., 0.), Vec2::new(1., 0.));
+            test(&mut Vec2::new(0., 1.), Vec2::new(0., 1.));
+            test(&mut Vec2::new(3., 4.), Vec2::new(3. / 5., 4. / 5.));
+            test(&mut Vec2::new(-5., 12.), Vec2::new(-5. / 13., 12. / 13.));
+            test(&mut Vec2::new(8., -15.), Vec2::new(8. / 17., -15. / 17.));
+            test(&mut Vec2::new(-7., -24.), Vec2::new(-7. / 25., -24. / 25.));
+        }
+
+        
+        #[test]
+        fn normalize() {
+            fn test(vector: Vec2<f64>, expected: Vec2<f64>) {
+                let actual = vector.normalize();
+                assert!((actual.x - expected.x).abs() < EPSILON, "actual x: {}, expected x: {}", actual.x, expected.x);
+                assert!((actual.y - expected.y).abs() < EPSILON, "actual y: {}, expected y: {}", actual.y, expected.y);
             }
+
+            test(Vec2::new(0., 0.), Vec2::new(0., 0.));
+            test(Vec2::new(1., 0.), Vec2::new(1., 0.));
+            test(Vec2::new(0., 1.), Vec2::new(0., 1.));
+            test(Vec2::new(3., 4.), Vec2::new(3. / 5., 4. / 5.));
+            test(Vec2::new(-5., 12.), Vec2::new(-5. / 13., 12. / 13.));
+            test(Vec2::new(8., -15.), Vec2::new(8. / 17., -15. / 17.));
+            test(Vec2::new(-7., -24.), Vec2::new(-7. / 25., -24. / 25.));
+        }
+
+        #[test]
+        fn rotate_mut() {
+            fn test(vector: &mut Vec2<f64>, radians : f64, expected: Vec2<f64>) {
+                let actual = vector.rotate_mut(radians);
+                assert!((actual.x - expected.x).abs() < EPSILON, "actual x: {}, expected x: {}", actual.x, expected.x);
+                assert!((actual.y - expected.y).abs() < EPSILON, "actual y: {}, expected y: {}", actual.y, expected.y);
+                assert_eq!(actual.x, vector.x, "Expect x to mutate");
+                assert_eq!(actual.y, vector.y, "Expect y to mutate");
+            }
+
+            test(&mut Vec2::zero(), PI, Vec2::zero());
+            test(&mut Vec2::unit(0.), FRAC_PI_3, Vec2::unit(FRAC_PI_3));
+            test(&mut Vec2::unit(FRAC_PI_4), FRAC_PI_2, Vec2::unit(3. * FRAC_PI_4));
+            test(&mut Vec2::unit(FRAC_PI_2), 11. * FRAC_PI_6, Vec2::unit(FRAC_PI_3));
+            test(&mut Vec2::unit(0.), 7. * FRAC_PI_3, Vec2::unit(FRAC_PI_3));
+            test(&mut Vec2::unit(FRAC_PI_4), 5. * FRAC_PI_2, Vec2::unit(3. * FRAC_PI_4));
+            test(&mut Vec2::unit(FRAC_PI_2), 23. * FRAC_PI_6, Vec2::unit(FRAC_PI_3));
+            test(&mut Vec2::unit(0.), -FRAC_PI_3, Vec2::unit(5. * FRAC_PI_3));
+            test(&mut Vec2::unit(FRAC_PI_4), -FRAC_PI_2, Vec2::unit(7. * FRAC_PI_4));
+            test(&mut Vec2::unit(FRAC_PI_2), -11. * FRAC_PI_6, Vec2::unit(2. * FRAC_PI_3));
+        }
+
+        
+        #[test]
+        fn rotate() {
+            fn test(vector: Vec2<f64>, radians : f64, expected: Vec2<f64>) {
+                let actual = vector.rotate(radians);
+                assert!((actual.x - expected.x).abs() < EPSILON, "actual x: {}, expected x: {}", actual.x, expected.x);
+                assert!((actual.y - expected.y).abs() < EPSILON, "actual y: {}, expected y: {}", actual.y, expected.y);
+            }
+
+            test(Vec2::zero(), PI, Vec2::zero());
+            test(Vec2::unit(0.), FRAC_PI_3, Vec2::unit(FRAC_PI_3));
+            test(Vec2::unit(FRAC_PI_4), FRAC_PI_2, Vec2::unit(3. * FRAC_PI_4));
+            test(Vec2::unit(FRAC_PI_2), 11. * FRAC_PI_6, Vec2::unit(FRAC_PI_3));
+            test(Vec2::unit(0.), 7. * FRAC_PI_3, Vec2::unit(FRAC_PI_3));
+            test(Vec2::unit(FRAC_PI_4), 5. * FRAC_PI_2, Vec2::unit(3. * FRAC_PI_4));
+            test(Vec2::unit(FRAC_PI_2), 23. * FRAC_PI_6, Vec2::unit(FRAC_PI_3));
+            test(Vec2::unit(0.), -FRAC_PI_3, Vec2::unit(5. * FRAC_PI_3));
+            test(Vec2::unit(FRAC_PI_4), -FRAC_PI_2, Vec2::unit(7. * FRAC_PI_4));
+            test(Vec2::unit(FRAC_PI_2), -11. * FRAC_PI_6, Vec2::unit(2. * FRAC_PI_3));
+        }
+
+        #[test]
+        fn reflect_mut() {
+            fn test(vector: &mut Vec2<f64>, axis: Vec2<f64>, expected: Vec2<f64>) {
+                let actual = vector.reflect_mut(axis);
+                assert!((actual.x - expected.x).abs() < EPSILON, "actual x: {}, expected x: {}", actual.x, expected.x);
+                assert!((actual.y - expected.y).abs() < EPSILON, "actual y: {}, expected y: {}", actual.y, expected.y);
+                assert_eq!(actual.x, vector.x, "Expect x to mutate");
+                assert_eq!(actual.y, vector.y, "Expect y to mutate");
+            }
+
+            test(&mut Vec2::zero(), Vec2::unit(FRAC_PI_2), Vec2::zero());
+            test(&mut Vec2::unit(0.), Vec2::unit(FRAC_PI_2), Vec2::unit(PI));
+            test(&mut Vec2::unit(0.), Vec2::unit(3. * FRAC_PI_2), Vec2::unit(PI));
+            test(&mut Vec2::unit(FRAC_PI_2), Vec2::unit(0.), Vec2::unit(3. * FRAC_PI_2));
+            test(&mut Vec2::unit(FRAC_PI_2), Vec2::unit(PI), Vec2::unit(3. * FRAC_PI_2));
+            test(&mut Vec2::unit(FRAC_PI_6), Vec2::unit(FRAC_PI_4), Vec2::unit(FRAC_PI_3));
+            test(&mut Vec2::unit(FRAC_PI_6), Vec2::unit(3. * FRAC_PI_4), Vec2::unit(8. * FRAC_PI_6));
+        }
+
+        
+        #[test]
+        fn reflect() {
+            fn test(vector: Vec2<f64>, axis: Vec2<f64>, expected: Vec2<f64>) {
+                let actual = vector.reflect(axis);
+                assert!((actual.x - expected.x).abs() < EPSILON, "actual x: {}, expected x: {}", actual.x, expected.x);
+                assert!((actual.y - expected.y).abs() < EPSILON, "actual y: {}, expected y: {}", actual.y, expected.y);
+            }
+
+            test(Vec2::zero(), Vec2::unit(FRAC_PI_2), Vec2::zero());
+            test(Vec2::unit(0.), Vec2::unit(FRAC_PI_2), Vec2::unit(PI));
+            test(Vec2::unit(0.), Vec2::unit(3. * FRAC_PI_2), Vec2::unit(PI));
+            test(Vec2::unit(FRAC_PI_2), Vec2::unit(0.), Vec2::unit(3. * FRAC_PI_2));
+            test(Vec2::unit(FRAC_PI_2), Vec2::unit(PI), Vec2::unit(3. * FRAC_PI_2));
+            test(Vec2::unit(FRAC_PI_6), Vec2::unit(FRAC_PI_4), Vec2::unit(FRAC_PI_3));
+            test(Vec2::unit(FRAC_PI_6), Vec2::unit(3. * FRAC_PI_4), Vec2::unit(8. * FRAC_PI_6));
+        }
+
+        #[test]
+        fn project_mut() {
+            fn test(vector: &mut Vec2<f64>, basis: Vec2<f64>, expected: Vec2<f64>) {
+                let actual = vector.project_mut(basis);
+                assert!((actual.x - expected.x).abs() < EPSILON, "actual x: {}, expected x: {}", actual.x, expected.x);
+                assert!((actual.y - expected.y).abs() < EPSILON, "actual y: {}, expected y: {}", actual.y, expected.y);
+                assert_eq!(actual.x, vector.x, "Expect x to mutate");
+                assert_eq!(actual.y, vector.y, "Expect y to mutate");
+            }
+
+            test(&mut Vec2::zero(), Vec2::unit(0.), Vec2::zero());
+            test(&mut Vec2::zero(), Vec2::unit(FRAC_PI_2), Vec2::zero());
+            test(&mut Vec2::new(1., 1.), Vec2::new(1., 0.), Vec2::new(1., 0.));
+            test(&mut Vec2::new(1., 1.), Vec2::new(0., 1.), Vec2::new(0., 1.));
+            test(&mut Vec2::new(-1., -1.), Vec2::new(1., 0.), Vec2::new(-1., 0.));
+            test(&mut Vec2::new(-1., -1.), Vec2::new(0., 1.), Vec2::new(0., -1.));
+            test(&mut Vec2::new(1., 1.), Vec2::new(-1., 0.), Vec2::new(1., 0.));
+            test(&mut Vec2::new(1., 1.), Vec2::new(0., -1.), Vec2::new(0., 1.));
+            test(&mut Vec2::new(-2., 2.), Vec2::new(4., -3.), Vec2::new(-56./25., 42./25.));
+        }
+
+        
+        #[test]
+        fn project() {
+            fn test(vector: Vec2<f64>, basis: Vec2<f64>, expected: Vec2<f64>) {
+                let actual = vector.project(basis);
+                assert!((actual.x - expected.x).abs() < EPSILON, "actual x: {}, expected x: {}", actual.x, expected.x);
+                assert!((actual.y - expected.y).abs() < EPSILON, "actual y: {}, expected y: {}", actual.y, expected.y);
+            }
+
+            test(Vec2::zero(), Vec2::unit(0.), Vec2::zero());
+            test(Vec2::zero(), Vec2::unit(FRAC_PI_2), Vec2::zero());
+            test(Vec2::new(1., 1.), Vec2::new(1., 0.), Vec2::new(1., 0.));
+            test(Vec2::new(1., 1.), Vec2::new(0., 1.), Vec2::new(0., 1.));
+            test(Vec2::new(-1., -1.), Vec2::new(1., 0.), Vec2::new(-1., 0.));
+            test(Vec2::new(-1., -1.), Vec2::new(0., 1.), Vec2::new(0., -1.));
+            test(Vec2::new(1., 1.), Vec2::new(-1., 0.), Vec2::new(1., 0.));
+            test(Vec2::new(1., 1.), Vec2::new(0., -1.), Vec2::new(0., 1.));
+            test(Vec2::new(-2., 2.), Vec2::new(4., -3.), Vec2::new(-56./25., 42./25.));
         }
     }
 }
