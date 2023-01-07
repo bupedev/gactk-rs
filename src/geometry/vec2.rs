@@ -82,7 +82,7 @@ impl<T: Real> Vec2<T> {
     }
 
     pub fn reflect(&self, axis: Vec2<T>) -> Self {
-        if(axis.magnitude().is_zero()) {
+        if axis.magnitude().is_zero() {
             return self.clone();
         }
 
