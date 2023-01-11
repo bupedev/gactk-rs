@@ -9,16 +9,37 @@ pub struct Poly2<T: Real> {
 }
 
 impl<T: Real> Poly2<T> {
-    pub fn new(vertices: &Vec<Vec2<T>>) -> Self {
-        // TODO: Panic if less than 3...
-        Self { vertices: vertices.clone() }
+    pub fn new(vertices: &[Vec2<T>]) -> Self {
+        if vertices.len() <= 2 {
+            panic!("polygons must have at least three vertices")
+        }
+
+        let mut filtered = vec![vertices[0]];
+        for i in 1..vertices.len() {
+            if vertices[i] != vertices[i - 1] {
+                filtered.push(vertices[i]);
+            }
+        }        
+        
+        if filtered.len() <= 2 {
+            panic!("polygons must have at least three distinct vertices")
+        }
+
+        Self { vertices: filtered }
     }
 }
 
 impl<T : Real + RealConst> Poly2<T> {
     pub fn regular<I : PrimInt>(vertex_count: I, side_length: T) -> Self {
-        // TODO: Panic if less than 3...
-        let n = T::from(vertex_count).expect("shits fucked");
+        if vertex_count <= I::zero() {
+            panic!("polygons cannot have a non-positive number of vertices");
+        }
+
+        if side_length <= T::zero() {
+            panic!("polygon side lengths must be strictly positive");
+        }
+        
+        let n = T::from(vertex_count).expect("cast failure");
         let radius = side_length * T::HALF / (T::PI / n).sin();
         let angle = T::TWO * T::PI / n;
         
@@ -38,40 +59,58 @@ mod tests {
     use std::f64::consts::{
         FRAC_PI_2, 
         FRAC_PI_3, 
-        FRAC_PI_4, 
-        // FRAC_PI_6, 
-        // PI
+        FRAC_PI_4,
     };
 
     const EPSILON: f64 = 1.5e-15;
 
-    // #[test]
-    // fn display() {
-    //     fn test(v: Vec2<f64>, string: &str) {
-    //         assert_eq!(v.to_string(), string);
-    //     }
-
-    //     test(Vec2::new(-2., 3.), "[-2, 3]");
-    //     test(Vec2::new(0.5, 0.), "[0.5, 0]");
-    // }
-
     mod constructors {
+        use num_traits::Zero;
+
         use super::*;
+        use std::panic::catch_unwind;
 
         #[test]
         fn new() {
-            let vertices = vec![
+            fn test(vertices: &[Vec2<f64>], expected: &[Vec2<f64>]) {
+
+                let poly = Poly2::new(vertices);
+                assert_eq!(poly.vertices.len(), expected.len());
+                for i in 0..expected.len() {
+                    assert_eq!(poly.vertices[i], expected[i]);
+                }
+            }
+
+            let square = vec![
                 Vec2::new(-0.5, -0.5),
                 Vec2::new(-0.5, 0.5),
                 Vec2::new(0.5, 0.5),
                 Vec2::new(0.5, -0.5)
             ];
-            let poly = Poly2::new(&vertices);
-            for i in 0..4 {
-                assert_eq!(poly.vertices[i], vertices[i]);
-            }
+            test(&square, &square);
+            
+            let duplicates = vec![
+                Vec2::new(-0.5, -0.5),
+                Vec2::new(-0.5, -0.5),
+                Vec2::new(0.5, 0.5),
+                Vec2::new(0.5, -0.5)
+            ];
+            test(&duplicates, &duplicates[1..]);
         }
 
+        #[test]
+        fn new_panic() {
+            fn test(vertices: Vec<Vec2<f64>>) {
+                let construction = || Poly2::new(&vertices);
+                let result = catch_unwind(construction);
+                assert!(result.is_err());
+            }
+
+            test(vec![]);
+            test(vec![Vec2::new(1., 0.)]);
+            test(vec![Vec2::new(1., 0.), Vec2::new(-1., 0.)]);
+            test(vec![Vec2::new(1., 0.), Vec2::new(-1., 0.), Vec2::new(-1., 0.)]);
+        }
         
         #[test]
         fn regular() { 
@@ -110,6 +149,22 @@ mod tests {
                 Vec2::unit(2. * FRAC_PI_2) * 2. * quad_length,
                 Vec2::unit(3. * FRAC_PI_2) * 2. * quad_length
             ]);
+        }
+        
+        #[test]
+        fn regular_panic() {
+            fn test(vertex_count: isize, side_length: f64) {
+                let construction = || Poly2::regular(vertex_count, side_length);
+                let result = catch_unwind(construction);
+                assert!(result.is_err());
+            }
+
+            test(-1, 1.);
+            test(0, 1.);
+            test(1, 1.);
+            test(2, 1.);
+            test(3, -1.);
+            test(3, 0.);
         }
     }
 }
