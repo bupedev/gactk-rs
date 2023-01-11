@@ -1,4 +1,7 @@
-use std::{fmt::{Display, Error, Formatter}, collections::VecDeque};
+use std::{
+    collections::VecDeque,
+    fmt::{Display, Error, Formatter},
+};
 
 #[derive(Debug, PartialEq)]
 pub enum VertexType {
@@ -35,12 +38,12 @@ impl Configuration {
 }
 
 impl TryFrom<&str> for Configuration {
-    type Error = Error;
+    type Error = &'static str;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let mut command_strings: VecDeque<&str> = value.split("/").collect();
         if command_strings.len() < 2 {
-            panic!("Configuration string must have at least one transformation");
+            return Err("Configuration string must have at least one transformation");
         }
 
         let mut phases: Vec<Vec<usize>> = vec![];
@@ -53,7 +56,7 @@ impl TryFrom<&str> for Configuration {
                 if let Ok(shape) = shape_parse_result {
                     phase.push(shape);
                 } else {
-                    panic!("Invalid shape in configuration string");
+                    return Err("Invalid shape in configuration string");
                 }
             }
             phases.push(phase)
@@ -64,24 +67,36 @@ impl TryFrom<&str> for Configuration {
             let mut transformation_string_chars = transformation_string.chars();
             let transformation_type_char_result = transformation_string_chars.next();
             if let Some(transformation_type_char) = transformation_type_char_result {
-                let transformation_source_string: String = transformation_string_chars.collect();
-                if transformation_source_string.len() == 0 {
+                let mut push_transformation = |source| {
                     let transformation = match transformation_type_char {
-                        'r' => Transformation::Rotation(TransformationSource::Origin(None)),
-                        'm' => Transformation::Reflection(TransformationSource::Origin(None)),
-                        _ => return Err("Unknown transformation character in configuration string")   
+                        'r' => Transformation::Rotation(source),
+                        'm' => Transformation::Reflection(source),
+                        _ => {
+                            return Err("Unknown transformation character in configuration string")
+                        }
                     };
                     transformations.push(transformation);
-                }
-                else {
-                    let transformation_source_numeric_parse_result = transformation_source_string.parse::<usize>();
-                    if let Ok(transformation_source_numeric) = transformation_source_numeric_parse_result {
-                        let transformation = match transformation_type_char {
-                            'r' => Transformation::Rotation(TransformationSource::Origin(Some(transformation_source_numeric))),
-                            'm' => Transformation::Reflection(TransformationSource::Origin(Some(transformation_source_numeric))),
-                            _ => return Err("Unknown transformation character in configuration string")   
-                        };
-                        transformations.push(transformation);
+                    Ok(())
+                };
+
+                let transformation_source_string: String = transformation_string_chars.collect();
+                if transformation_source_string.len() == 0 {
+                    let result = push_transformation(TransformationSource::Origin(None));
+                    if let Err(message) = result {
+                        return Err(message);
+                    }
+                } else {
+                    let transformation_source_numeric_parse_result =
+                        transformation_source_string.parse::<usize>();
+                    if let Ok(transformation_source_numeric) =
+                        transformation_source_numeric_parse_result
+                    {
+                        let result = push_transformation(TransformationSource::Origin(Some(
+                            transformation_source_numeric,
+                        )));
+                        if let Err(message) = result {
+                            return Err(message);
+                        }
                     } else {
                         let mut chars = transformation_source_string.chars();
                         chars.next();
@@ -91,33 +106,36 @@ impl TryFrom<&str> for Configuration {
                         let vertex_type_char_result = vertex_string_chars.next();
                         if let Some(vertex_type_char) = vertex_type_char_result {
                             let vertex_index_string: String = vertex_string_chars.collect();
-                            let vertex_index_numeric_parse_result = vertex_index_string.parse::<usize>();
-                            if let Ok(vertex_index_numeric_parse_result) = vertex_index_numeric_parse_result {
+                            let vertex_index_numeric_parse_result =
+                                vertex_index_string.parse::<usize>();
+                            if let Ok(vertex_index_numeric_parse_result) =
+                                vertex_index_numeric_parse_result
+                            {
                                 let vertex_type = match vertex_type_char {
                                     'v' => VertexType::Corner(vertex_index_numeric_parse_result),
                                     'c' => VertexType::Centre(vertex_index_numeric_parse_result),
                                     'h' => VertexType::Edge(vertex_index_numeric_parse_result),
-                                    _ => return Err("Unknown vertex type character in configuration string")   
+                                    _ => {
+                                        return Err(
+                                            "Unknown vertex type character in configuration string",
+                                        )
+                                    }
                                 };
-                                let transformation = match transformation_type_char {
-                                    'r' => Transformation::Rotation(TransformationSource::Vertex(vertex_type)),
-                                    'm' => Transformation::Reflection(TransformationSource::Vertex(vertex_type)),
-                                    _ => return Err("Unknown transformation character in configuration string")   
-                                };
-                                transformations.push(transformation);
+                                let result =
+                                    push_transformation(TransformationSource::Vertex(vertex_type));
+                                if let Err(message) = result {
+                                    return Err(message);
+                                }
+                            } else {
+                                return Err("Invalid vertex index in configuration string");
                             }
-                            else {
-                                return Err("Invalid vertex index in configuration string")
-                            }
-                        }
-                        else {
-                            return Err("Empty vertex specifier in configuration string")
+                        } else {
+                            return Err("Empty vertex specifier in configuration string");
                         }
                     }
                 }
-            }
-            else {
-                return Err("Empty transformation in configuration string")
+            } else {
+                return Err("Empty transformation in configuration string");
             }
         }
 
@@ -246,7 +264,7 @@ mod tests {
 
         #[test]
         fn string_conversion() {
-            fn test(config_string: &str, expected: Result<Configuration, Error>) {
+            fn test(config_string: &str, expected: Result<Configuration, &str>) {
                 let actual = Configuration::try_from(config_string);
                 assert_eq!(actual, expected);
             }
@@ -259,7 +277,7 @@ mod tests {
                         Transformation::Reflection(TransformationSource::Origin(Some(30))),
                         Transformation::Rotation(TransformationSource::Vertex(VertexType::Edge(2))),
                     ],
-                })
+                }),
             );
 
             test(
@@ -272,7 +290,7 @@ mod tests {
                             2,
                         ))),
                     ],
-                })
+                }),
             );
 
             test(
@@ -288,8 +306,30 @@ mod tests {
                             30,
                         ))),
                     ],
-                })
+                }),
             );
+
+            test(
+                "3",
+                Err("Configuration string must have at least one transformation"),
+            );
+            
+            test(
+                "x/m30/r(h2)",
+                Err("Invalid shape in configuration string"),
+            );
+
+            test(
+                "3/x30/r(h2)",
+                Err("Unknown transformation character in configuration string"),
+            );
+            
+            test(
+                "3/m30/r(x2)",
+                Err("Unknown vertex type character in configuration string"),
+            );
+
+
         }
     }
 }
