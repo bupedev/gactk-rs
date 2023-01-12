@@ -24,8 +24,8 @@ pub enum Transformation {
 
 #[derive(Debug, PartialEq)]
 pub struct Configuration {
-    phases: Vec<Vec<usize>>,
-    transformations: Vec<Transformation>,
+    pub phases: Vec<Vec<usize>>,
+    pub transformations: Vec<Transformation>,
 }
 
 impl Configuration {

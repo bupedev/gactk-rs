@@ -5,3 +5,4 @@ pub mod poly2;
 pub use self::poly2::Poly2;
 
 pub mod antwerp;
+pub use self::antwerp::Configuration;
