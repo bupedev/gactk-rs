@@ -3,11 +3,27 @@ use std::{
     fmt::{Display, Error, Formatter},
 };
 
+use num_traits::real::Real;
+
+use crate::numerics::RealConst;
+
+use super::Poly2;
+
 #[derive(Debug, PartialEq)]
 pub enum VertexType {
     Corner(usize),
     Centre(usize),
     Edge(usize),
+}
+
+impl Display for VertexType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        match self {
+            VertexType::Corner(index) => write!(f, "v{}", index),
+            VertexType::Centre(index) => write!(f, "c{}", index),
+            VertexType::Edge(index) => write!(f, "h{}", index),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -16,10 +32,34 @@ pub enum TransformationSource {
     Vertex(VertexType),
 }
 
+impl Display for TransformationSource {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        match self {
+            TransformationSource::Origin(angle_option) => {
+                if let Some(angle) = angle_option {
+                    write!(f, "{}", angle)
+                } else {
+                    write!(f, "")
+                }
+            }
+            TransformationSource::Vertex(vertex_type) => write!(f, "({})", vertex_type),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Transformation {
     Rotation(TransformationSource),
     Reflection(TransformationSource),
+}
+
+impl Display for Transformation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        match self {
+            Transformation::Rotation(source) => write!(f, "r{}", source.to_string()),
+            Transformation::Reflection(source) => write!(f, "m{}", source.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -34,6 +74,36 @@ impl Configuration {
             phases,
             transformations,
         }
+    }
+}
+
+impl Display for Configuration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        let mut formatted = "".to_string();
+        formatted.push_str(
+            self.phases
+                .iter()
+                .map(|phase| {
+                    phase
+                        .iter()
+                        .map(|side| side.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .collect::<Vec<_>>()
+                .join("-")
+                .as_str(),
+        );
+        formatted.push('/');
+        formatted.push_str(
+            self.transformations
+                .iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>()
+                .join("/")
+                .as_str(),
+        );
+        write!(f, "{}", formatted)
     }
 }
 
@@ -143,73 +213,38 @@ impl TryFrom<&str> for Configuration {
     }
 }
 
-impl Display for VertexType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        match self {
-            VertexType::Corner(index) => write!(f, "v{}", index),
-            VertexType::Centre(index) => write!(f, "c{}", index),
-            VertexType::Edge(index) => write!(f, "h{}", index),
-        }
+#[derive(Debug, PartialEq)]
+pub struct Lattice<T: Real> {
+    pub tiles: Vec<Poly2<T>>,
+    pub connectivity: Vec<Vec<usize>>
+}
+
+impl<T: Real> Lattice<T> {
+    fn generate(config: Configuration, iterations: usize) -> Self {
+        
     }
 }
 
-impl Display for TransformationSource {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        match self {
-            TransformationSource::Origin(angle_option) => {
-                if let Some(angle) = angle_option {
-                    write!(f, "{}", angle)
-                } else {
-                    write!(f, "")
-                }
-            }
-            TransformationSource::Vertex(vertex_type) => write!(f, "({})", vertex_type),
-        }
-    }
-}
-
-impl Display for Transformation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        match self {
-            Transformation::Rotation(source) => write!(f, "r{}", source.to_string()),
-            Transformation::Reflection(source) => write!(f, "m{}", source.to_string()),
-        }
-    }
-}
-
-impl Display for Configuration {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        let mut formatted = "".to_string();
-        formatted.push_str(
-            self.phases
-                .iter()
-                .map(|phase| {
-                    phase
-                        .iter()
-                        .map(|side| side.to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                })
-                .collect::<Vec<_>>()
-                .join("-")
-                .as_str(),
-        );
-        formatted.push('/');
-        formatted.push_str(
-            self.transformations
-                .iter()
-                .map(|t| t.to_string())
-                .collect::<Vec<_>>()
-                .join("/")
-                .as_str(),
-        );
-        write!(f, "{}", formatted)
+fn create_seed_tile<T>(sides: usize) -> Result<Poly2<T>, &'static str> where T: Real + RealConst {
+    match sides {
+        3 => Ok(Poly2::regular(3, T::one())),
+        4 => Ok(Poly2::regular(4, T::one())),
+        6 => Ok(Poly2::regular(6, T::one())),
+        8 => Ok(Poly2::regular(8, T::one())),
+        12 => Ok(Poly2::regular(12, T::one())),
+        _ => Err("That shape isn't kosher fam..."),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // TODO: mod vertex_type
+    
+    // TODO: mod transformation_source
+    
+    // TODO: mod transformation
 
     mod configuration {
         use super::*;
@@ -332,4 +367,8 @@ mod tests {
 
         }
     }
-}
+
+    mod lattice {
+
+    }
+}   

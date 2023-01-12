@@ -4,6 +4,7 @@ use crate::numerics::RealConst;
 
 use super::Vec2;
 
+#[derive(Debug, PartialEq)]
 pub struct Poly2<T: Real> {
     pub vertices: Vec<Vec2<T>>,
 }
@@ -19,8 +20,8 @@ impl<T: Real> Poly2<T> {
             if vertices[i] != vertices[i - 1] {
                 filtered.push(vertices[i]);
             }
-        }        
-        
+        }
+
         if filtered.len() <= 2 {
             panic!("polygons must have at least three distinct vertices")
         }
@@ -29,8 +30,8 @@ impl<T: Real> Poly2<T> {
     }
 }
 
-impl<T : Real + RealConst> Poly2<T> {
-    pub fn regular<I : PrimInt>(vertex_count: I, side_length: T) -> Self {
+impl<T: Real + RealConst> Poly2<T> {
+    pub fn regular<I: PrimInt>(vertex_count: I, side_length: T) -> Self {
         if vertex_count <= I::zero() {
             panic!("polygons cannot have a non-positive number of vertices");
         }
@@ -38,11 +39,11 @@ impl<T : Real + RealConst> Poly2<T> {
         if side_length <= T::zero() {
             panic!("polygon side lengths must be strictly positive");
         }
-        
+
         let n = T::from(vertex_count).expect("cast failure");
         let radius = side_length * T::HALF / (T::PI / n).sin();
         let angle = T::TWO * T::PI / n;
-        
+
         let mut vertices = vec![];
         let mut cum_angle = T::zero();
         while cum_angle < T::TAU {
@@ -53,14 +54,45 @@ impl<T : Real + RealConst> Poly2<T> {
     }
 }
 
+impl<T: Real> Poly2<T> {
+    pub fn translate_mut(&mut self, displacement: Vec2<T>) -> Self {
+        *self = self.translate(displacement);
+        *self
+    }
+
+    pub fn translate(&self, displacement: Vec2<T>) -> Self {
+        let translated_vertices: Vec<Vec2<T>> =
+            self.vertices.iter().map(|x| x + displacement).collect();
+        Self::new(&translated_vertices)
+    }
+
+    pub fn rotate_mut(&mut self, radians: T) -> Self {
+        *self = self.rotate(radians);
+        *self
+    }
+
+    pub fn rotate(&self, radians: T) -> Self {
+        let rotated_vertices: Vec<Vec2<T>> =
+            self.vertices.iter().map(|x| x.rotate(radians)).collect();
+        Self::new(&rotated_vertices)
+    }
+
+    pub fn reflect_mut(&mut self, axis: Vec2<T>) -> Self {
+        *self = self.reflect(axis);
+        *self
+    }
+
+    pub fn reflect(&self, axis: Vec2<T>) -> Self {
+        let reflected_vertices: Vec<Vec2<T>> =
+            self.vertices.iter().map(|x| x.reflect(axis)).collect();
+        Self::new(&reflected_vertices)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::f64::consts::{
-        FRAC_PI_2, 
-        FRAC_PI_3, 
-        FRAC_PI_4,
-    };
+    use std::f64::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4};
 
     const EPSILON: f64 = 1.5e-15;
 
@@ -73,7 +105,6 @@ mod tests {
         #[test]
         fn new() {
             fn test(vertices: &[Vec2<f64>], expected: &[Vec2<f64>]) {
-
                 let poly = Poly2::new(vertices);
                 assert_eq!(poly.vertices.len(), expected.len());
                 for i in 0..expected.len() {
@@ -85,15 +116,15 @@ mod tests {
                 Vec2::new(-0.5, -0.5),
                 Vec2::new(-0.5, 0.5),
                 Vec2::new(0.5, 0.5),
-                Vec2::new(0.5, -0.5)
+                Vec2::new(0.5, -0.5),
             ];
             test(&square, &square);
-            
+
             let duplicates = vec![
                 Vec2::new(-0.5, -0.5),
                 Vec2::new(-0.5, -0.5),
                 Vec2::new(0.5, 0.5),
-                Vec2::new(0.5, -0.5)
+                Vec2::new(0.5, -0.5),
             ];
             test(&duplicates, &duplicates[1..]);
         }
@@ -109,11 +140,15 @@ mod tests {
             test(vec![]);
             test(vec![Vec2::new(1., 0.)]);
             test(vec![Vec2::new(1., 0.), Vec2::new(-1., 0.)]);
-            test(vec![Vec2::new(1., 0.), Vec2::new(-1., 0.), Vec2::new(-1., 0.)]);
+            test(vec![
+                Vec2::new(1., 0.),
+                Vec2::new(-1., 0.),
+                Vec2::new(-1., 0.),
+            ]);
         }
-        
+
         #[test]
-        fn regular() { 
+        fn regular() {
             fn test(vertex_count: usize, side_length: f64, expected: Vec<Vec2<f64>>) {
                 let poly = Poly2::regular(vertex_count, side_length);
                 assert_eq!(expected.len(), poly.vertices.len());
@@ -124,33 +159,48 @@ mod tests {
             }
 
             let tri_length = 0.5 / FRAC_PI_3.sin();
-            test(3, 1., vec![
-                Vec2::unit(0. * FRAC_PI_3) * tri_length,
-                Vec2::unit(2. * FRAC_PI_3) * tri_length,
-                Vec2::unit(4. * FRAC_PI_3) * tri_length,
-            ]);
-            test(3, 2., vec![
-                Vec2::unit(0. * FRAC_PI_3) * 2. * tri_length,
-                Vec2::unit(2. * FRAC_PI_3) * 2. * tri_length,
-                Vec2::unit(4. * FRAC_PI_3) * 2. * tri_length,
-            ]);
+            test(
+                3,
+                1.,
+                vec![
+                    Vec2::unit(0. * FRAC_PI_3) * tri_length,
+                    Vec2::unit(2. * FRAC_PI_3) * tri_length,
+                    Vec2::unit(4. * FRAC_PI_3) * tri_length,
+                ],
+            );
+            test(
+                3,
+                2.,
+                vec![
+                    Vec2::unit(0. * FRAC_PI_3) * 2. * tri_length,
+                    Vec2::unit(2. * FRAC_PI_3) * 2. * tri_length,
+                    Vec2::unit(4. * FRAC_PI_3) * 2. * tri_length,
+                ],
+            );
 
-            
             let quad_length = 0.5 / FRAC_PI_4.sin();
-            test(4, 1., vec![
-                Vec2::unit(0. * FRAC_PI_2) * quad_length,
-                Vec2::unit(1. * FRAC_PI_2) * quad_length,
-                Vec2::unit(2. * FRAC_PI_2) * quad_length,
-                Vec2::unit(3. * FRAC_PI_2) * quad_length
-            ]);
-            test(4, 2., vec![
-                Vec2::unit(0. * FRAC_PI_2) * 2. * quad_length,
-                Vec2::unit(1. * FRAC_PI_2) * 2. * quad_length,
-                Vec2::unit(2. * FRAC_PI_2) * 2. * quad_length,
-                Vec2::unit(3. * FRAC_PI_2) * 2. * quad_length
-            ]);
+            test(
+                4,
+                1.,
+                vec![
+                    Vec2::unit(0. * FRAC_PI_2) * quad_length,
+                    Vec2::unit(1. * FRAC_PI_2) * quad_length,
+                    Vec2::unit(2. * FRAC_PI_2) * quad_length,
+                    Vec2::unit(3. * FRAC_PI_2) * quad_length,
+                ],
+            );
+            test(
+                4,
+                2.,
+                vec![
+                    Vec2::unit(0. * FRAC_PI_2) * 2. * quad_length,
+                    Vec2::unit(1. * FRAC_PI_2) * 2. * quad_length,
+                    Vec2::unit(2. * FRAC_PI_2) * 2. * quad_length,
+                    Vec2::unit(3. * FRAC_PI_2) * 2. * quad_length,
+                ],
+            );
         }
-        
+
         #[test]
         fn regular_panic() {
             fn test(vertex_count: isize, side_length: f64) {
@@ -168,4 +218,3 @@ mod tests {
         }
     }
 }
-
