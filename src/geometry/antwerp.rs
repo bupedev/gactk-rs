@@ -3,11 +3,11 @@ use std::{
     fmt::{Display, Error, Formatter},
 };
 
-use num_traits::real::Real;
+use num_traits::{real::Real, Euclid};
 
 use crate::numerics::RealConst;
 
-use super::Poly2;
+use super::{Poly2, Vec2};
 
 #[derive(Debug, PartialEq)]
 pub enum VertexType {
@@ -216,22 +216,49 @@ impl TryFrom<&str> for Configuration {
 #[derive(Debug, PartialEq)]
 pub struct Lattice<T: Real> {
     pub tiles: Vec<Poly2<T>>,
-    pub connectivity: Vec<Vec<usize>>
+    pub connectivity: Vec<Vec<usize>>,
 }
 
-impl<T: Real> Lattice<T> {
-    fn generate(config: Configuration, iterations: usize) -> Self {
+impl<T: Real + RealConst + Euclid> Lattice<T> {
+    pub fn generate(config: &Configuration, iterations: usize) -> Self {
+        let mut tiles: Vec<Poly2<T>> = vec![create_seed_tile(config.phases[0][0]).expect("better fucking be ok")];
         
+        for phase in &config.phases {
+            for &shape_order in phase {
+                let shape: Poly2<T> = create_tile(shape_order).expect("this is a poor error message");
+
+
+
+            }
+        }
+
+        Self {
+            tiles,
+            connectivity: vec![],
+        }
     }
 }
 
-fn create_seed_tile<T>(sides: usize) -> Result<Poly2<T>, &'static str> where T: Real + RealConst {
+fn create_seed_tile<T>(sides: usize) -> Result<Poly2<T>, &'static str>
+where
+    T: Real + RealConst + Euclid,
+{
+    match create_tile::<T>(sides) {
+        Ok(tile) => match sides {
+            3 => Ok(tile.translate(Vec2::<T>::unit(T::FRAC_PI_3) * (T::HALF / T::FRAC_PI_3.sin()))),
+            4 | 6 | 8 | 12 => Ok(tile.rotate(T::PI / T::from(sides).expect("cast failure"))),
+            _ => Err("That shape isn't kosher fam..."),
+        },
+        Err(problem) => Err(problem),
+    }
+}
+
+fn create_tile<T>(sides: usize) -> Result<Poly2<T>, &'static str>
+where
+    T: Real + RealConst + Euclid,
+{
     match sides {
-        3 => Ok(Poly2::regular(3, T::one())),
-        4 => Ok(Poly2::regular(4, T::one())),
-        6 => Ok(Poly2::regular(6, T::one())),
-        8 => Ok(Poly2::regular(8, T::one())),
-        12 => Ok(Poly2::regular(12, T::one())),
+        3 | 4 | 6 | 8 | 12 => Ok(Poly2::regular(sides, T::one())),
         _ => Err("That shape isn't kosher fam..."),
     }
 }
@@ -241,9 +268,9 @@ mod tests {
     use super::*;
 
     // TODO: mod vertex_type
-    
+
     // TODO: mod transformation_source
-    
+
     // TODO: mod transformation
 
     mod configuration {
@@ -348,27 +375,20 @@ mod tests {
                 "3",
                 Err("Configuration string must have at least one transformation"),
             );
-            
-            test(
-                "x/m30/r(h2)",
-                Err("Invalid shape in configuration string"),
-            );
+
+            test("x/m30/r(h2)", Err("Invalid shape in configuration string"));
 
             test(
                 "3/x30/r(h2)",
                 Err("Unknown transformation character in configuration string"),
             );
-            
+
             test(
                 "3/m30/r(x2)",
                 Err("Unknown vertex type character in configuration string"),
             );
-
-
         }
     }
 
-    mod lattice {
-
-    }
-}   
+    mod lattice {}
+}
