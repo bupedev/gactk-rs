@@ -1,4 +1,4 @@
-use std::ops::Rem;
+use std::{ops::Rem, fmt::Display};
 
 use num_traits::{real::Real, Euclid, PrimInt, Zero};
 
@@ -6,17 +6,14 @@ use crate::numerics::RealConst;
 
 use super::Vec2;
 
-#[derive(Debug, PartialEq, Clone)]
 pub enum AngularDirection {
     Clockwise,
     CounterClockwise,
 }
-// consider having some of these fields evaluated and cached on demand, I could see cases where you wouldn't need this additional information about the polygon. Alternatively make the method for calculating these public and leave it up to the consumer to cache them if need be...
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Poly2<T: Real> {
-    pub vertices: Vec<Vec2<T>>,
-    pub anchor: Vec2<T>,
-    pub direction: AngularDirection,
+    pub vertices: Vec<Vec2<T>>
 }
 
 impl<T: Real + RealConst + Euclid> Poly2<T> {
@@ -36,71 +33,10 @@ impl<T: Real + RealConst + Euclid> Poly2<T> {
             panic!("polygons must have at least three distinct vertices")
         }
 
-        let anchor = calculateVertexCentroid(&filtered);
-
-        let direction = match calculateAngularSum::<T>(&filtered) {
-            t if t < T::zero() => AngularDirection::Clockwise,
-            _ => AngularDirection::CounterClockwise,
-        };
-
         Self {
-            vertices: filtered,
-            anchor,
-            direction,
+            vertices: filtered
         }
     }
-}
-
-fn calculateAngularSum<T>(vertices: &[Vec2<T>]) -> T
-where
-    T: Real + RealConst + Euclid,
-{
-    let mut sum = T::zero();
-    let N = vertices.len();
-
-    if N < 1 {
-        return sum;
-    }
-
-    let mut next_heading = vertices[0] - vertices[N - 1];
-    for i in 1..N {
-        let current_heading = vertices[i] - vertices[i - 1];
-        sum = sum + current_heading.angle_to(next_heading);
-        next_heading = current_heading;
-    }
-
-    sum
-}
-
-// TODO: I feel like I could really optimize this with vector operations, perhaps just with one loop instead of two...?
-fn calculateVertexCentroid<T>(vertices: &[Vec2<T>]) -> Vec2<T>
-where
-    T: Real + RealConst,
-{
-    let N = vertices.len();
-
-    match N {
-        0 => return Vec2::<T>::zero(),
-        1 => return vertices.first().unwrap().clone(),
-        _ => (),
-    }
-
-    let mut a = T::zero();
-    for i in 0..N {
-        let v0 = vertices[i.rem(N)];
-        let v1 = vertices[(i + 1).rem(N)];
-        a = a + v0.dot(v1);
-    }
-    a = a * T::HALF;
-
-    let mut c = Vec2::<T>::zero();
-    for i in 0..N {
-        let v0 = vertices[i.rem(N)];
-        let v1 = vertices[(i + 1).rem(N)];
-        c = c + (v0 + v1) * v0.dot(v1);
-    }
-
-    c / (T::TWO * T::TWO + T::TWO) * a
 }
 
 impl<T: Real + RealConst + Euclid> Poly2<T> {
@@ -127,7 +63,7 @@ impl<T: Real + RealConst + Euclid> Poly2<T> {
     }
 }
 
-impl<T: Real + RealConst + Euclid> Poly2<T> {
+impl<T: Real + RealConst + Euclid + Display> Poly2<T> {
     pub fn translate(&self, displacement: Vec2<T>) -> Self {
         let translated_vertices: Vec<Vec2<T>> =
             self.vertices.iter().map(|&x| x + displacement).collect();
@@ -145,6 +81,63 @@ impl<T: Real + RealConst + Euclid> Poly2<T> {
             self.vertices.iter().map(|x| x.reflect(axis)).collect();
         Self::new(&reflected_vertices)
     }
+    
+    fn angular_sum(&self) -> T
+    {
+        let mut sum = T::zero();
+        let vertices = &self.vertices;
+        let count = vertices.len();
+
+        if count < 1 {
+            return sum;
+        }
+
+        let last_heading = vertices[0] - vertices[count - 1];
+        let mut current_heading = last_heading;
+        for i in 1..count {
+            let next_heading = vertices[i] - vertices[i - 1];
+            let incr = current_heading.angle_to(next_heading); 
+            println!("{}", incr);
+            sum = sum + incr;
+            current_heading = next_heading;
+        }
+
+        let incr = current_heading.angle_to(last_heading); 
+        println!("{}", incr);
+        sum + incr
+    }
+
+    // TODO: I feel like I could really optimize this with vector operations, perhaps just with one loop instead of two...?
+    fn centroid(&self) -> Vec2<T>
+    where
+        T: Real + RealConst,
+    {
+        let vertices = &self.vertices;
+        let n = vertices.len();
+
+        match n {
+            0 => return Vec2::<T>::zero(),
+            1 => return vertices.first().unwrap().clone(),
+            _ => (),
+        }
+
+        let mut a = T::zero();
+        for i in 0..n {
+            let v0 = vertices[i.rem(n)];
+            let v1 = vertices[(i + 1).rem(n)];
+            a = a + v0.dot(v1);
+        }
+        a = a * T::HALF;
+
+        let mut c = Vec2::<T>::zero();
+        for i in 0..n {
+            let v0 = vertices[i.rem(n)];
+            let v1 = vertices[(i + 1).rem(n)];
+            c = c + (v0 + v1) * v0.dot(v1);
+        }
+
+        c / (T::TWO * T::TWO + T::TWO) * a
+    }
 }
 
 #[cfg(test)]
@@ -155,26 +148,21 @@ mod tests {
     const EPSILON: f64 = 1.5e-15;
 
     mod constructors {
-        use num_traits::Zero;
-
         use super::*;
+        use num_traits::Zero;
         use std::panic::catch_unwind;
 
         #[test]
         fn new() {
             fn test(
                 vertices: &[Vec2<f64>],
-                expected_vertices: &[Vec2<f64>],
-                expected_anchor: Vec2<f64>,
-                expected_direction: AngularDirection,
+                expected: &[Vec2<f64>],
             ) {
                 let poly = Poly2::new(vertices);
-                assert_eq!(poly.vertices.len(), expected_vertices.len());
-                for i in 0..expected_vertices.len() {
-                    assert_eq!(poly.vertices[i], expected_vertices[i]);
+                assert_eq!(poly.vertices.len(), expected.len());
+                for i in 0..expected.len() {
+                    assert_eq!(poly.vertices[i], expected[i]);
                 }
-                assert!((poly.anchor - expected_anchor).magnitude() < EPSILON);
-                assert_eq!(poly.direction, expected_direction);
             }
 
             let clockwise_square = vec![
@@ -185,23 +173,7 @@ mod tests {
             ];
             test(
                 &clockwise_square,
-                &clockwise_square,
-                Vec2::<f64>::zero(),
-                AngularDirection::Clockwise,
-            );
-
-            test(
-                &clockwise_square.iter().rev(),
-                &clockwise_square.iter().rev(),
-                Vec2::<f64>::zero(),
-                AngularDirection::CounterClockwise,
-            );
-
-            test(
-                &clockwise_square.iter().map(|v| v + 0.5),
-                &clockwise_square.iter().map(|v| v + 0.5),
-                Vec2::new(0.5, 0.5),
-                AngularDirection::CounterClockwise,
+                &clockwise_square
             );
 
             let duplicates = vec![
@@ -213,9 +185,7 @@ mod tests {
             ];
             test(
                 &duplicates, 
-                &duplicates[1..],
-                Vec2::<f64>::zero(),
-                AngularDirection::Clockwise,
+                &duplicates[1..]
             );
         }
 
@@ -305,6 +275,58 @@ mod tests {
             test(2, 1.);
             test(3, -1.);
             test(3, 0.);
+        }
+    }
+
+    mod methods {
+        use super::*;
+        use std::f64::consts::PI;
+
+        #[test]
+        fn angular_sum() {
+            fn test(polygon: Poly2<f64>, expected: f64) {
+                let actual = polygon.angular_sum();
+                println!("{} == {}", actual, expected);
+                assert!((actual - expected).abs() < EPSILON);
+            }
+
+            let clockwise_square = vec![
+                Vec2::new(0.5, 0.5),
+                Vec2::new(-0.5, 0.5),    
+                Vec2::new(-0.5, -0.5),
+                Vec2::new(0.5, -0.5),
+            ];
+            test(Poly2::new(&clockwise_square), 2. * PI);
+
+            let counter_clockwise_square = vec![
+                Vec2::new(0.5, 0.5),
+                Vec2::new(0.5, -0.5),
+                Vec2::new(-0.5, -0.5),
+                Vec2::new(-0.5, 0.5),
+            ];
+            test(Poly2::new(&counter_clockwise_square), -2. * PI);
+
+            let winding_heart = vec![
+                Vec2::new(0.5, 0.5),
+                Vec2::new(-0.5, 0.5),    
+                Vec2::new(-0.5, 0.0),    
+                Vec2::new(0.25, 0.0),    
+                Vec2::new(0.25, 0.25),   
+                Vec2::new(0.0, 0.25),   
+                Vec2::new(0.0, -0.5),
+                Vec2::new(0.5, -0.5),
+            ];
+            test(Poly2::new(&winding_heart), 4. * PI);
+
+            let figure_eight = vec![
+                Vec2::new(0.5, 0.5),
+                Vec2::new(0.0, 0.5),
+                Vec2::new(0.0, -0.5),
+                Vec2::new(-0.5, -0.5),
+                Vec2::new(-0.5, 0.0),
+                Vec2::new(0.5, 0.0),
+            ];
+            test(Poly2::new(&figure_eight), 0.);
         }
     }
 }

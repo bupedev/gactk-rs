@@ -108,7 +108,11 @@ impl<T: Real> Vec2<T> {
 
 impl<T: Real + RealConst + Euclid> Vec2<T> {
     pub fn angle_to(&self, other: Vec2<T>) -> T {
-        (other.angle() - self.angle()).rem_euclid(&T::TAU)
+        let std_angle = (other.angle() - self.angle()).rem_euclid(&T::TAU);
+        match std_angle {
+            t if t > T::PI => -T::PI + t.rem_euclid(&T::PI),
+            _ => std_angle
+        }
     }
 }
 
@@ -318,9 +322,11 @@ mod tests {
             }
 
             test(Vec2::unit(FRAC_PI_6), Vec2::unit(5. * FRAC_PI_6), 2. * FRAC_PI_3);
-            test(Vec2::unit(5. * FRAC_PI_6), Vec2::unit(FRAC_PI_6), 4. * FRAC_PI_3);
+            test(Vec2::unit(5. * FRAC_PI_6), Vec2::unit(FRAC_PI_6), -2. * FRAC_PI_3);
             test(Vec2::unit(FRAC_PI_4), Vec2::unit(5. * FRAC_PI_4), PI);
-            test(Vec2::unit(5. * FRAC_PI_4), Vec2::unit(FRAC_PI_4), PI);
+            test(Vec2::unit(5. * FRAC_PI_4), Vec2::unit(FRAC_PI_4), -PI);
+            test(Vec2::unit(3. * FRAC_PI_2), Vec2::unit(PI), -FRAC_PI_2);
+            test(Vec2::unit(PI), Vec2::unit(3. * FRAC_PI_2), FRAC_PI_2);
         }
 
         #[test]

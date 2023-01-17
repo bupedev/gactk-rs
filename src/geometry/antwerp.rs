@@ -219,7 +219,7 @@ pub struct Lattice<T: Real> {
     pub connectivity: Vec<Vec<usize>>,
 }
 
-impl<T: Real + RealConst + Euclid> Lattice<T> {
+impl<T: Real + RealConst + Euclid + Display> Lattice<T> {
     pub fn generate(config: &Configuration, iterations: usize) -> Self {
         let mut tiles: Vec<Poly2<T>> = vec![create_seed_tile(config.phases[0][0]).expect("better fucking be ok")];
         
@@ -241,7 +241,7 @@ impl<T: Real + RealConst + Euclid> Lattice<T> {
 
 fn create_seed_tile<T>(sides: usize) -> Result<Poly2<T>, &'static str>
 where
-    T: Real + RealConst + Euclid,
+    T: Real + RealConst + Euclid + Display,
 {
     match create_tile::<T>(sides) {
         Ok(tile) => match sides {
