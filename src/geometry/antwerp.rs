@@ -64,13 +64,15 @@ impl Display for Transformation {
 
 #[derive(Debug, PartialEq)]
 pub struct Configuration {
+    pub seed: usize,
     pub phases: Vec<Vec<usize>>,
     pub transformations: Vec<Transformation>,
 }
 
 impl Configuration {
-    fn new(phases: Vec<Vec<usize>>, transformations: Vec<Transformation>) -> Self {
+    fn new(seed: usize, phases: Vec<Vec<usize>>, transformations: Vec<Transformation>) -> Self {
         Self {
+            seed,
             phases,
             transformations,
         }
@@ -79,7 +81,10 @@ impl Configuration {
 
 impl Display for Configuration {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
-        let mut formatted = "".to_string();
+        let mut formatted = self.seed.to_string();
+        if self.phases.len() > 0 {
+            formatted.push('-');
+        }
         formatted.push_str(
             self.phases
                 .iter()
@@ -116,20 +121,30 @@ impl TryFrom<&str> for Configuration {
             return Err("Configuration string must have at least one transformation");
         }
 
+        let mut seed: usize = usize::MAX;
         let mut phases: Vec<Vec<usize>> = vec![];
         let phases_strings: Vec<&str> = command_strings.pop_front().unwrap().split("-").collect();
         for phase_string in phases_strings {
-            let mut phase = vec![];
-            let shape_strings = phase_string.split(",");
-            for shape_string in shape_strings {
-                let shape_parse_result = shape_string.parse::<usize>();
-                if let Ok(shape) = shape_parse_result {
-                    phase.push(shape);
+            if seed == usize::MAX {
+                let phase_string_result = phase_string.parse::<usize>();
+                if let Ok(seed_order) = phase_string_result {
+                    seed = seed_order;
                 } else {
-                    return Err("Invalid shape in configuration string");
+                    return Err("Invalid seed in configuration string");
                 }
+            } else {
+                let mut phase = vec![];
+                let shape_strings = phase_string.split(",");
+                for shape_string in shape_strings {
+                    let shape_parse_result = shape_string.parse::<usize>();
+                    if let Ok(shape) = shape_parse_result {
+                        phase.push(shape);
+                    } else {
+                        return Err("Invalid shape in configuration string");
+                    }
+                }
+                phases.push(phase)
             }
-            phases.push(phase)
         }
 
         let mut transformations = vec![];
@@ -209,7 +224,7 @@ impl TryFrom<&str> for Configuration {
             }
         }
 
-        Ok(Configuration::new(phases, transformations))
+        Ok(Configuration::new(seed, phases, transformations))
     }
 }
 
@@ -221,14 +236,21 @@ pub struct Lattice<T: Real> {
 
 impl<T: Real + RealConst + Euclid + Display> Lattice<T> {
     pub fn generate(config: &Configuration, iterations: usize) -> Self {
-        let mut tiles: Vec<Poly2<T>> = vec![create_seed_tile(config.phases[0][0]).expect("better fucking be ok")];
+        let mut tiles: Vec<Poly2<T>> = vec![];
+        let mut connectors: Vec<Vec2<T>> = vec![];
         
         for phase in &config.phases {
             for &shape_order in phase {
                 let shape: Poly2<T> = create_tile(shape_order).expect("this is a poor error message");
+                
+                if tiles.len() == 0 {
+                    tiles.push(shape)
+                } else if tiles.len() == 1 {
+                    let join_index = starting_index(shape_order);
 
+                } else {
 
-
+                }
             }
         }
 
@@ -263,6 +285,15 @@ where
     }
 }
 
+fn starting_index(sides: usize) -> Result<usize, &'static str> {
+    match sides {
+        3 | 4 | 6  => Ok(0),
+        8 => Ok(1),
+        12 => Ok(2),
+        _ => Err("Invalid shape")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,7 +316,8 @@ mod tests {
 
             test(
                 Configuration {
-                    phases: vec![vec![3]],
+                    seed: 3,
+                    phases: vec![],
                     transformations: vec![
                         Transformation::Reflection(TransformationSource::Origin(Some(30))),
                         Transformation::Rotation(TransformationSource::Vertex(VertexType::Edge(2))),
@@ -296,7 +328,8 @@ mod tests {
 
             test(
                 Configuration {
-                    phases: vec![vec![12], vec![6, 4]],
+                    seed: 12,
+                    phases: vec![vec![6, 4]],
                     transformations: vec![
                         Transformation::Reflection(TransformationSource::Origin(Some(30))),
                         Transformation::Rotation(TransformationSource::Vertex(VertexType::Centre(
@@ -309,7 +342,8 @@ mod tests {
 
             test(
                 Configuration {
-                    phases: vec![vec![6], vec![3, 0, 3, 3, 3, 3]],
+                    seed: 6,
+                    phases: vec![vec![3, 0, 3, 3, 3, 3]],
                     transformations: vec![
                         Transformation::Rotation(TransformationSource::Vertex(VertexType::Edge(4))),
                         Transformation::Rotation(TransformationSource::Vertex(VertexType::Corner(
@@ -334,7 +368,8 @@ mod tests {
             test(
                 "3/m30/r(h2)",
                 Ok(Configuration {
-                    phases: vec![vec![3]],
+                    seed: 3,
+                    phases: vec![],
                     transformations: vec![
                         Transformation::Reflection(TransformationSource::Origin(Some(30))),
                         Transformation::Rotation(TransformationSource::Vertex(VertexType::Edge(2))),
@@ -345,7 +380,8 @@ mod tests {
             test(
                 "12-6,4/m30/r(c2)",
                 Ok(Configuration {
-                    phases: vec![vec![12], vec![6, 4]],
+                    seed: 12,
+                    phases: vec![vec![6, 4]],
                     transformations: vec![
                         Transformation::Reflection(TransformationSource::Origin(Some(30))),
                         Transformation::Rotation(TransformationSource::Vertex(VertexType::Centre(
@@ -358,7 +394,8 @@ mod tests {
             test(
                 "6-3,0,3,3,3,3/r(h4)/r(v15)/r(v30)",
                 Ok(Configuration {
-                    phases: vec![vec![6], vec![3, 0, 3, 3, 3, 3]],
+                    seed: 6,
+                    phases: vec![vec![3, 0, 3, 3, 3, 3]],
                     transformations: vec![
                         Transformation::Rotation(TransformationSource::Vertex(VertexType::Edge(4))),
                         Transformation::Rotation(TransformationSource::Vertex(VertexType::Corner(
@@ -376,7 +413,9 @@ mod tests {
                 Err("Configuration string must have at least one transformation"),
             );
 
-            test("x/m30/r(h2)", Err("Invalid shape in configuration string"));
+            test("x/m30/r(h2)", Err("Invalid seed in configuration string"));
+
+            test("3-x/m30/r(h2)", Err("Invalid shape in configuration string"));
 
             test(
                 "3/x30/r(h2)",
